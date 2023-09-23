@@ -1,5 +1,6 @@
 class Jogador(val nome: String, var fichas: Int) {
     val mao = Mao()
+    var saiuDaRodada: Boolean = false
 
     fun apostar(quantidade: Int): Boolean {
         if (quantidade > fichas) {
