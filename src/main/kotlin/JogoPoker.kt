@@ -4,12 +4,12 @@ class JogoPoker(private val numJogadoresAI: Int) {
     private val baralho = Baralho()
     private val jogadorHumano = Jogador("Jogador 1 (Humano)", 1000)
     private val jogadoresAI = mutableListOf<Jogador>()
-    private val jogadores: List<Jogador>
-
+    val jogadores: List<Jogador>
     private val cartasComunitarias = Mao()
-
     private var continuarJogando = true
     private var indiceDoDistribuidor = 0
+    private var valorPote = 0
+
 
     init {
         require(numJogadoresAI >= 2) { "Deve haver pelo menos dois jogadores controlados pela máquina." }
@@ -30,6 +30,7 @@ class JogoPoker(private val numJogadoresAI: Int) {
             jogadores[indiceJogador].mao.adicionarCarta(baralho.pegarCarta()!!)
             jogadores[indiceJogador].mao.adicionarCarta(baralho.pegarCarta()!!)
         }
+        jogadores[indiceDoDistribuidor].elegivelParaApostar= false
     }
 
     private fun determinarDistribuidor(): Int {
@@ -46,7 +47,7 @@ class JogoPoker(private val numJogadoresAI: Int) {
     }
 
     fun jogar() {
-        println("Bem-vindo ao Texas Hold'em Poker!")
+        println("Bem-vindo ao Poker Texas Hold'em!")
         println("Você possui 1000 fichas. O objetivo é vencer os jogadores controlados pela máquina.")
 
         while (continuarJogando) {
@@ -55,12 +56,12 @@ class JogoPoker(private val numJogadoresAI: Int) {
             for (jogador in jogadores) {
                 jogador.mao.limpar()
             }
+            valorPote = 0
 
             distribuirMaos()
 
             println("\nDistribuidor: ${jogadores[indiceDoDistribuidor].nome}")
 
-            // Realizar o procedimento de apostas com base nas regras que você descreveu.
             fazerApostasPreFlop()
 
             if (!continuarJogando) {
@@ -69,17 +70,14 @@ class JogoPoker(private val numJogadoresAI: Int) {
 
             distribuirCartasComunitarias()
 
-            // Procedimento de apostas pós-flop
             fazerApostasPosFlop()
 
             if (!continuarJogando) {
                 break
             }
 
-            // Showdown (revelação das cartas)
-            showdown()
+            mostrarCartas()
 
-            // Perguntar se os jogadores desejam continuar após cada rodada
             continuarJogando = continuarJogando()
         }
     }
@@ -93,11 +91,11 @@ class JogoPoker(private val numJogadoresAI: Int) {
 
         println("\n${smallBlind.nome} é o small blind e aposta 10 fichas.")
         smallBlind.mao.adicionarApostaNasFichas(10)
-        smallBlind.apostar(10)
+        apostar(smallBlind, 10)
 
         println("\n${bigBlind.nome} é o big blind e aposta 20 fichas.")
         bigBlind.mao.adicionarApostaNasFichas(20)
-        bigBlind.apostar(20)
+        apostar(bigBlind, 20)
 
         var indiceJogadorAtual = (indiceDoDistribuidor + 3) % jogadores.size
 
@@ -105,54 +103,57 @@ class JogoPoker(private val numJogadoresAI: Int) {
             val jogadorAtual = jogadores[indiceJogadorAtual]
             val acoesDisponiveis = listOf("Fold", "Check", "Raise")
 
-            for (jogador in jogadores) {
-                if (!jogador.saiuDaRodada) {
-                    println("\n${jogador.nome}, suas fichas: ${jogador.fichas}")
-                    println("Sua mão: ${jogador.mao.toString()}")
-                    println("Cartas comunitárias: ${cartasComunitarias.toString()}")
-                    println("Aposta atual: ${jogador.mao.obterFichasApostadas()} fichas")
-                    println("Suas opções: ${acoesDisponiveis.joinToString(", ")}")
-                }
-            }
+            if (jogadorAtual.elegivelParaApostar && !jogadorAtual.saiuDaRodada) {
+                println("\n${jogadorAtual.nome}, suas fichas: ${jogadorAtual.fichas}")
+                println("Sua mão: ${jogadorAtual.mao.toString()}")
+                println("Cartas comunitárias: ${cartasComunitarias.toString()}")
+                exibirValorDoPote()
+                println("Aposta atual: ${jogadorAtual.mao.obterFichasApostadas()} fichas")
+                println("Suas opções: ${acoesDisponiveis.joinToString(", ")}")
 
-            val escolha = if (jogadorAtual == jogadorHumano) {
-                if (jogadorAtual.saiuDaRodada) {
-                    // Se o jogador humano saiu da rodada, não solicita mais entrada.
-                    ""
-                } else {
+                val escolha = if (jogadorAtual == jogadorHumano) {
                     println("Escolha uma opção:")
                     readLine()
+                } else {
+                    escolherAcaoInteligente(jogadorAtual, cartasComunitarias.getCartas(), acoesDisponiveis)
                 }
-            } else {
-                acoesDisponiveis[Random.nextInt(acoesDisponiveis.size)]
-            }
 
-            when (escolha) {
-                "Fold" -> {
-                    println("${jogadorAtual.nome} desistiu.")
-                    jogadorAtual.mao.limpar()
-                    jogadorAtual.saiuDaRodada = true
-                }
-                "Check" -> {
-                    println("${jogadorAtual.nome} deu check.")
-                }
-                "Raise" -> {
-                    var valorAumento = if (jogadorAtual == jogadorHumano) {
-                        println("Digite o valor do aumento (mínimo 20, máximo ${jogadorAtual.fichas}): ")
-                        readLine()?.toIntOrNull() ?: 0
-                    } else {
-                        Random.nextInt(20, jogadorAtual.fichas)
+                when (escolha?.toLowerCase()) {
+                    "fold" -> {
+                        println("${jogadorAtual.nome} desistiu.")
+                        jogadorAtual.mao.limpar()
+                        jogadorAtual.saiuDaRodada = true
                     }
-                    while(valorAumento < 20 || valorAumento > jogadorAtual.fichas){
-                        println("Aposta inválida. Tente novamente.")
-                        valorAumento = readLine()?.toIntOrNull() ?: 0
+                    "check" -> {
+                        println("${jogadorAtual.nome} deu check.")
                     }
-                    println("${jogadorAtual.nome} aumentou a aposta em $valorAumento fichas.")
-                    jogadorAtual.mao.adicionarApostaNasFichas(valorAumento)
-                    jogadorAtual.apostar(valorAumento)
+                    "raise" -> {
+                        var valorAumento = 0
+                        if (jogadorAtual == jogadorHumano) {
+                            while (true) {
+                                println("Digite o valor do aumento (mínimo 1, máximo ${jogadorAtual.fichas}): ")
+                                val input = readLine()
+                                valorAumento = input?.toIntOrNull() ?: 0
+                                if (valorAumento < 1 || valorAumento > jogadorAtual.fichas) {
+                                    println("Aposta inválida. Tente novamente.")
+                                } else {
+                                    break
+                                }
+                            }
+                        } else {
+                            valorAumento = Random.nextInt(1, jogadorAtual.fichas + 1)
+                        }
+
+                        if (apostar(jogadorAtual, valorAumento)) {
+                            println("${jogadorAtual.nome} aumentou em $valorAumento fichas.")
+                        }
+                    }
+                    else -> {
+                        println("Opção inválida. Tente novamente.")
+                    }
                 }
+                verificarVencedor()
             }
-            verificarVencedor()
 
             indiceJogadorAtual = (indiceJogadorAtual + 1) % jogadores.size
             if (indiceJogadorAtual == indiceSmallBlind) {
@@ -160,14 +161,30 @@ class JogoPoker(private val numJogadoresAI: Int) {
             }
         }
     }
+    private fun escolherAcaoInteligente(jogador: Jogador, cartasComunitarias: List<Carta>, acoesDisponiveis: List<String>): String {
+        val qualidadeMao = avaliarMao(jogador.mao.getCartas(), cartasComunitarias)
+
+        return when {
+            qualidadeMao >= 2 -> "raise"
+            qualidadeMao >= 1 -> "check"
+            else -> acoesDisponiveis.random()
+        }
+    }
+
+
 
     private fun distribuirCartasComunitarias() {
         cartasComunitarias.limpar()
+        println("")
+        println("//////////////////////////////////")
         for (i in 1..3) {
             val carta = baralho.pegarCarta()!!
             cartasComunitarias.adicionarCarta(carta)
             println("Flop: ${carta.valor} de ${carta.naipe}")
         }
+        println("//////////////////////////////////")
+
+
         fazerApostasPosFlop()
         if (!continuarJogando) {
             return
@@ -175,7 +192,10 @@ class JogoPoker(private val numJogadoresAI: Int) {
 
         val cartaTurn = baralho.pegarCarta()!!
         cartasComunitarias.adicionarCarta(cartaTurn)
+        println("")
+        println("//////////////////////////////////")
         println("Turn: ${cartaTurn.valor} de ${cartaTurn.naipe}")
+        println("//////////////////////////////////")
         fazerApostasPosFlop()
         if (!continuarJogando) {
             return
@@ -183,78 +203,114 @@ class JogoPoker(private val numJogadoresAI: Int) {
 
         val cartaRiver = baralho.pegarCarta()!!
         cartasComunitarias.adicionarCarta(cartaRiver)
+        println("")
+        println("//////////////////////////////////")
         println("River: ${cartaRiver.valor} de ${cartaRiver.naipe}")
+        println("//////////////////////////////////")
         fazerApostasPosFlop()
     }
 
     private fun fazerApostasPosFlop() {
-        var indiceJogadorAtual = (indiceDoDistribuidor + 1) % jogadores.size
+        var índiceJogadorAtual = (indiceDoDistribuidor + 1) % jogadores.size
 
         while (true) {
+            val jogadorAtual = jogadores[índiceJogadorAtual]
+            val acoesDisponiveis = listOf("Check", "Fold", "Raise")
 
-            val jogadorAtual = jogadores[indiceJogadorAtual]
-            val acoesDisponiveis = listOf("Fold", "Check", "Raise")
+            if (!jogadorAtual.saiuDaRodada) {
+                println("\n${jogadorAtual.nome}, suas fichas: ${jogadorAtual.fichas}")
+                println("Sua mão: ${jogadorAtual.mao.toString()}")
+                println("Cartas comunitárias: ${cartasComunitarias.toString()}")
+                exibirValorDoPote()
+                println("Suas opções: ${acoesDisponiveis.joinToString(", ")}")
 
-            for (jogador in jogadores) {
-                if (!jogador.saiuDaRodada) {
-                    println("\n${jogador.nome}, suas fichas: ${jogador.fichas}")
-                    println("Sua mão: ${jogador.mao.toString()}")
-                    println("Cartas comunitárias: ${cartasComunitarias.toString()}")
-                    println("Aposta atual: ${jogador.mao.obterFichasApostadas()} fichas")
-                    println("Suas opções: ${acoesDisponiveis.joinToString(", ")}")
-                }
-            }
-
-            val escolha = if (jogadorAtual == jogadorHumano) {
-                if (jogadorAtual.saiuDaRodada) {
-                    // Se o jogador humano saiu da rodada, não solicita mais entrada.
-                    ""
-                } else {
+                val escolha = if (jogadorAtual == jogadorHumano) {
                     println("Escolha uma opção:")
                     readLine()
-                }
-            } else {
-                if (jogadorAtual.saiuDaRodada) {
-                    // Se o jogador humano saiu da rodada, não solicita mais entrada.
-                    ""
                 } else {
-                    acoesDisponiveis[Random.nextInt(acoesDisponiveis.size)]
+                    escolherAcaoInteligente(jogadorAtual, cartasComunitarias.getCartas(), acoesDisponiveis)
+                }
+
+                when (escolha?.toLowerCase()) {
+                    "fold" -> {
+                        println("${jogadorAtual.nome} desistiu.")
+                        jogadorAtual.mao.limpar()
+                        jogadorAtual.saiuDaRodada = true
+                    }
+                    "check" -> {
+                        println("${jogadorAtual.nome} deu check.")
+                    }
+                    "raise" -> {
+                        var valorAumento = 0
+                        if (jogadorAtual == jogadorHumano) {
+                            while (true) {
+                                println("Digite o valor do aumento (mínimo 1, máximo ${jogadorAtual.fichas}): ")
+                                val input = readLine()
+                                valorAumento = input?.toIntOrNull() ?: 0
+                                if (valorAumento < 1 || valorAumento > jogadorAtual.fichas) {
+                                    println("Aposta inválida. Tente novamente.")
+                                } else {
+                                    break
+                                }
+                            }
+                        } else {
+                            valorAumento = Random.nextInt(1, jogadorAtual.fichas + 1)
+                        }
+
+                        if (apostar(jogadorAtual, valorAumento)) {
+                            println("${jogadorAtual.nome} aumentou em $valorAumento fichas.")
+                        }
+                    }
+                    else -> {
+                        println("Opção inválida. Tente novamente.")
+                    }
                 }
             }
 
-            when (escolha) {
-                "Fold" -> {
-                    println("${jogadorAtual.nome} desistiu.")
-                    jogadorAtual.mao.limpar()
-                    jogadorAtual.saiuDaRodada = true
-                }
-                "Check" -> {
-                    println("${jogadorAtual.nome} deu check.")
-                }
-                "Raise" -> {
-                    val valorAumento = if (jogadorAtual == jogadorHumano) {
-                        println("Digite o valor do aumento (mínimo 20, máximo ${jogadorAtual.fichas}): ")
-                        readLine()?.toIntOrNull() ?: 0
-                    } else {
-                        Random.nextInt(20, jogadorAtual.fichas + 1)
-                    }
-                    if (valorAumento < 20 || valorAumento > jogadorAtual.fichas) {
-                        println("Aposta inválida. Tente novamente.")
-                    } else {
-                        println("${jogadorAtual.nome} aumentou em $valorAumento fichas.")
-                        jogadorAtual.mao.adicionarApostaNasFichas(valorAumento)
-                        jogadorAtual.apostar(valorAumento)
-                    }
-                }
-            }
-            verificarVencedor()
-
-            indiceJogadorAtual = (indiceJogadorAtual + 1) % jogadores.size
-            if (indiceJogadorAtual == indiceDoDistribuidor) {
+            índiceJogadorAtual = (índiceJogadorAtual + 1) % jogadores.size
+            if (índiceJogadorAtual == indiceDoDistribuidor) {
                 break
             }
         }
     }
+
+    fun apostar(jogador: Jogador, valorAposta: Int): Boolean {
+        if (valorAposta > jogador.fichas) {
+            println("Aposta maior do que a quantidade de fichas disponíveis.")
+            return false
+        }
+        jogador.fichas -= valorAposta
+        valorPote += valorAposta
+        return true
+    }
+
+
+    private fun mostrarCartas() {
+        val jogadoresRestantes = jogadores.filter { it.mao.getCartas().isNotEmpty() }
+
+        if (jogadoresRestantes.size == 1) {
+            val vencedor = jogadoresRestantes.first()
+            println("\nResultado: ${vencedor.nome} venceu a rodada!")
+            vencedor.fichas += valorPote
+            valorPote = 0
+        } else {
+            val mãosComJogadores = jogadoresRestantes.associateBy({ it }, { avaliarMao(it.mao.getCartas(), cartasComunitarias.getCartas()) })
+            val jogadorVencedor = mãosComJogadores.maxByOrNull { it.value }?.key
+            println("\nResultado: ${jogadorVencedor?.nome} venceu a rodada!")
+            jogadorVencedor?.fichas = valorPote
+            valorPote = 0
+        }
+
+        exibirPlacarRodada()
+    }
+
+    private fun exibirPlacarRodada() {
+        println("\nPlacar da Rodada:")
+        for (jogador in jogadores) {
+            println("${jogador.nome}: ${jogador.fichas} fichas")
+        }
+    }
+
 
     private fun showdown() {
         val jogadoresRestantes = jogadores.filter { it.mao.getCartas().isNotEmpty() }
@@ -268,8 +324,11 @@ class JogoPoker(private val numJogadoresAI: Int) {
             println("\nResultado: ${jogadorVencedor?.nome} venceu a rodada!")
         }
 
-        exibirPontuacoesRodada() // Exibe as pontuações após cada rodada
+
+
+        exibirPontuacoesRodada()
     }
+
 
     private fun exibirPontuacoesRodada() {
         println("\nPontuações da Rodada:")
@@ -286,10 +345,19 @@ class JogoPoker(private val numJogadoresAI: Int) {
 
         println("\nDeseja continuar jogando? (S para sim, qualquer outra tecla para sair)")
         val escolha = readLine()
-        return escolha?.equals("S", ignoreCase = true) == true
+        if (escolha?.equals("S", ignoreCase = true) == true) {
+
+            for (jogador in jogadores) {
+                jogador.saiuDaRodada = false
+                jogador.mao.limpar()
+            }
+            return true
+        }
+        return false
     }
 
-    private fun avaliarMao(cartasJogador: List<Carta>, cartasComunitarias: List<Carta>): Int {
+
+    fun avaliarMao(cartasJogador: List<Carta>, cartasComunitarias: List<Carta>): Int {
         val todasCartas = cartasJogador + cartasComunitarias
         val agrupadoPorValor = todasCartas.groupBy { it.valor }
         val maxOcorrencias = agrupadoPorValor.values.map { it.size }.maxOrNull() ?: 0
@@ -316,8 +384,59 @@ class JogoPoker(private val numJogadoresAI: Int) {
         if (jogadores.count { !it.saiuDaRodada } == 1) {
             val vencedor = jogadores.first { !it.saiuDaRodada }
             println("\nResultado: ${vencedor.nome} venceu a rodada!")
-            exibirPontuacoesRodada() // Exibe as pontuações após cada rodada
+            exibirPontuacoesRodada()
             continuarJogando = continuarJogando()
         }
     }
+
+
+
+    fun compararCartas(carta1: Carta, carta2: Carta): Carta {
+
+        val comparacaoNaipe = carta1.naipe.compareTo(carta2.naipe)
+
+        if (comparacaoNaipe != 0) {
+
+            return if (carta1.naipe > carta2.naipe) carta1 else carta2
+        } else {
+
+            return if (carta1.valor > carta2.valor) carta1 else carta2
+        }
+    }
+
+    fun desempatar(maosJogadores: List<List<Carta>>, jogadores: List<Jogador>): Jogador? {
+        var jogadorVencedor: Jogador? = null
+        var cartaMaisAlta: Carta? = null
+
+        for (i in maosJogadores.indices) {
+            val cartasMao = maosJogadores[i]
+
+            val cartaMaisAltaMao = cartasMao.maxByOrNull { it.valor.valor }
+
+            if (cartaMaisAlta == null || (cartaMaisAltaMao != null && cartaMaisAltaMao.valor.valor > cartaMaisAlta.valor.valor)) {
+                cartaMaisAlta = cartaMaisAltaMao
+                jogadorVencedor = jogadores[i]
+            }
+        }
+
+        return jogadorVencedor
+    }
+
+    private fun exibirValorDoPote() {
+        println("Pote atual: $valorPote fichas")
+    }
+
+    private fun calcularApostaAtual(): Int {
+        var apostaAtual = 0
+
+        for (jogador in jogadores) {
+            if (!jogador.saiuDaRodada) {
+                apostaAtual += jogador.mao.obterFichasApostadas()
+            }
+        }
+
+        return apostaAtual
+    }
+
+
 }
